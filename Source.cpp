@@ -4,17 +4,60 @@ CS 230 Advanced Computer Architecture
 Assignment: Lab 5
 Submission Type: Microsoft Visual Studio 2022
 Date Modified: 05/28/2024
-*/
 
-/* COMPUTER CHARACTERISTICS */
-/*
+----------------------------------------------------------------------------------
+COMPUTER CHARACTERISTICS
+----------------------------------------------------------------------------------
 Processor: AMD Ryzen 7 5700G with Radeon Graphics 3.80 GHz
 RAM: 16.0 GB
 System Type: 64-bit operating system, x64-based processor
-*/
 
-/* MODIFICATIONS AND RESULTS */
-/*
+----------------------------------------------------------------------------------
+INITIAL RUN (BASELINE PERFORMANCE)
+----------------------------------------------------------------------------------
+Enter array size (q to quit) [200]:  200
+Memory required:  315K.
+
+
+LINPACK benchmark, Double precision.
+Machine precision:  15 digits.
+Array size 200 X 200.
+Average rolled and unrolled performance:
+
+    Reps Time(s) DGEFA   DGESL  OVERHEAD    KFLOPS
+----------------------------------------------------
+     512   0.67  86.21%   3.75%  10.04%  1171911.111
+    1024   1.33  87.27%   2.64%  10.09%  1177800.112
+    2048   2.67  87.31%   2.47%  10.22%  1172399.611
+    4096   5.34  87.15%   2.96%   9.90%  1168017.719
+    8192  10.70  87.22%   2.61%  10.17%  1170813.473
+
+...elapsed time difference: 21.000000 seconds
+...CPU time: 21.374000 seconds
+Enter array size (q to quit) [200]:  1000
+Memory required:  7824K.
+
+
+LINPACK benchmark, Double precision.
+Machine precision:  15 digits.
+Array size 1000 X 1000.
+Average rolled and unrolled performance:
+
+    Reps Time(s) DGEFA   DGESL  OVERHEAD    KFLOPS
+----------------------------------------------------
+       8   0.97  96.30%   0.92%   2.77%  1416402.675
+      16   1.98  96.17%   0.86%   2.98%  1395042.468
+      32   3.89  96.40%   0.82%   2.77%  1417899.930
+      64   7.75  96.35%   0.77%   2.88%  1425623.312
+     128  15.55  96.39%   0.84%   2.76%  1418931.129
+
+...elapsed time difference: 31.000000 seconds
+...CPU time: 30.994000 seconds
+Enter array size (q to quit) [200]:
+
+----------------------------------------------------------------------------------
+MODIFICATIONS AND OBSERVATIONS
+----------------------------------------------------------------------------------
  1. Use AVX intrinsics for matgen()
  Methods: Completely refactor the function to rely almost entirely on AVX instructions for more fine-tuned control over the calculations.
  Results: While the code itself was easier to follow logically, the code produces fewer kflops and longer CPU times for both arrays sized 200 and 1000. The original is used instead but the AVX implementation is kept as commented-out code for your convenience.
@@ -54,6 +97,51 @@ System Type: 64-bit operating system, x64-based processor
  10. Remove type-casting and re-initialization of variables in idamax()
  Methods: Combined the initialization of dmax and itemp to streamline the code, combined the increment handling for both cases into a single loop. This should, in theory, improve performance especially for large arrays.
  Results: Perhaps the single largest improvement in terms of both kflops and CPU time, as compared with any of the other changes. When implementing a custom fabs function, the kflops did not change significant but the CPU time was much higher. It seems the built-in fabs function is better equipped to deal with the current test cases.
+
+----------------------------------------------------------------------------------
+FINAL RESULTS
+----------------------------------------------------------------------------------
+Enter array size (q to quit) [200]:  200
+Memory required:  315K.
+
+
+LINPACK benchmark, Double precision.
+Machine precision:  15 digits.
+Array size 200 X 200.
+Average rolled and unrolled performance:
+
+    Reps Time(s) DGEFA   DGESL  OVERHEAD    KFLOPS
+----------------------------------------------------
+     512   0.58  85.62%   2.40%  11.99%  1367989.624
+    1024   1.16  85.38%   2.24%  12.38%  1380071.966
+    2048   2.34  85.70%   2.48%  11.83%  1362027.441
+    4096   4.65  85.25%   2.71%  12.04%  1374675.790
+    8192   9.31  85.63%   2.68%  11.68%  1367989.624
+   16384  18.82  85.75%   2.61%  11.64%  1352855.540
+
+...elapsed time difference: 38.000000 seconds
+...CPU time: 37.463000 seconds
+Enter array size (q to quit) [200]:  1000
+Memory required:  7824K.
+
+
+LINPACK benchmark, Double precision.
+Machine precision:  15 digits.
+Array size 1000 X 1000.
+Average rolled and unrolled performance:
+
+    Reps Time(s) DGEFA   DGESL  OVERHEAD    KFLOPS
+----------------------------------------------------
+       8   0.83  95.89%   0.60%   3.51%  1680868.839
+      16   1.66  95.79%   1.02%   3.19%  1665218.291
+      32   3.34  95.90%   0.93%   3.17%  1658526.533
+      64   6.84  95.81%   0.89%   3.30%  1621681.527
+     128  13.38  95.90%   0.84%   3.26%  1657757.866
+
+...elapsed time difference: 27.000000 seconds
+...CPU time: 26.786000 seconds
+Enter array size (q to quit) [200]:
+
 */
 
 #include <stdio.h>
@@ -293,7 +381,7 @@ static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma)
 //
 //    // Extract the maximum value from the vector
 //    double max_vals[4];
-//    _mm256_storeu_pd(max_vals, max_val_vec);
+//    __mm256_storeu_pd(max_vals, max_val_vec);
 //    for (int k = 0; k < 4; k++) {
 //        if (max_vals[k] > max_val) {
 //            max_val = max_vals[k];
