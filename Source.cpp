@@ -25,7 +25,26 @@
 // Methods: Applied a loop unrolling technique in cases where 'incx' and 'incy' are both 1, in order to reduce the number of iterations and loop overhead.
 // Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
 //
-//
+// 6. Loop unrolling in dscal_r()
+// Methods: Similar to ddor_r(), we use a loop unrolling technique, reduce the number of conditional checks, and use pointer arithmetic.
+// Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
+// 
+// 7. Remove redundancy in daxpy_ur()
+// Methods: First, we combine the initial checks into a single return statement for cleaner code, improved the loop unrolling technique similar to ddor_r and dscal, and implement pointer arithmetic.
+// Results: Kflops and CPU time improved moderately.
+// 
+// 8. Remove redundancy in ddot_ur()
+// Methods: Identical to daxpy_ur() improvements.
+// Results: Kflops and CPU time improved moderately.
+// 
+// 9. Remove redundancy in dscal_ur()
+// Methods: Identical to daxpy_ur()
+// Results: Interestingly, on it's own, showed significant improvements in both kflops as well as CPU time. However, with the previous optimizations already in place, the changes actually adversely affect both the klops and CPU. More testing is needed to understand why.
+// 
+// 10. Remove type-casting and re-initialization of variables in idamax()
+// Methods: Combined the initialization of dmax and itemp to streamline the code, combined the increment handling for both cases into a single loop. This should, in theory, improve performance especially for large arrays.
+// Results: Perhaps the single largest improvement in terms of both kflops and CPU time, as compared with any of the other changes. When implementing a custom fabs function, the kflops did not change significant but the CPU time was much higher. It seems the built-in fabs function is better equipped to deal with the current test cases.
+// 
 //
 
 
@@ -71,7 +90,6 @@ static REAL second(void);
 static void* mempool;
 
 int main(int argc, char* argv[])
-
 {
     char    buf[80];
     int     arsize;
@@ -136,7 +154,6 @@ int main(int argc, char* argv[])
 }
 
 static REAL linpack(long nreps, int arsize)
-
 {
     REAL* a, * b;
     REAL   norma, t1, kflops, tdgesl, tdgefa, totalt, toverhead, ops;
@@ -496,235 +513,193 @@ static REAL ddot_r(int n, REAL* dx, int incx, REAL* dy, int incy)
     return dtemp;
 }
 
-
-/*
-** Scales a vector by a constant.
-** Jack Dongarra, linpack, 3/11/78.
-** ROLLED version
-*/
+// REFACTORED
 static void dscal_r(int n, REAL da, REAL* dx, int incx)
-
 {
-    int i, nincx;
+    if (n <= 0) return;
 
-    if (n <= 0)
-        return;
+    int i;
     if (incx != 1)
     {
-
         /* code for increment not equal to 1 */
-
-        nincx = n * incx;
-        for (i = 0; i < nincx; i = i + incx)
-            dx[i] = da * dx[i];
-        return;
-    }
-
-    /* code for increment equal to 1 */
-
-    for (i = 0; i < n; i++)
-        dx[i] = da * dx[i];
-}
-
-
-/*
-** constant times a vector plus a vector.
-** Jack Dongarra, linpack, 3/11/78.
-** UNROLLED version
-*/
-static void daxpy_ur(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
-
-{
-    int i, ix, iy, m;
-
-    if (n <= 0)
-        return;
-    if (da == ZERO)
-        return;
-
-    if (incx != 1 || incy != 1)
-    {
-
-        /* code for unequal increments or equal increments != 1 */
-
-        ix = 1;
-        iy = 1;
-        if (incx < 0) ix = (-n + 1) * incx + 1;
-        if (incy < 0)iy = (-n + 1) * incy + 1;
-        for (i = 0; i < n; i++)
+        int nincx = n * incx;
+        for (i = 0; i < nincx; i += incx)
         {
-            dy[iy] = dy[iy] + da * dx[ix];
-            ix = ix + incx;
-            iy = iy + incy;
-        }
-        return;
-    }
-
-    /* code for both increments equal to 1 */
-
-    m = n % 4;
-    if (m != 0)
-    {
-        for (i = 0; i < m; i++)
-            dy[i] = dy[i] + da * dx[i];
-        if (n < 4)
-            return;
-    }
-    for (i = m; i < n; i = i + 4)
-    {
-        dy[i] = dy[i] + da * dx[i];
-        dy[i + 1] = dy[i + 1] + da * dx[i + 1];
-        dy[i + 2] = dy[i + 2] + da * dx[i + 2];
-        dy[i + 3] = dy[i + 3] + da * dx[i + 3];
-    }
-}
-
-
-/*
-** Forms the dot product of two vectors.
-** Jack Dongarra, linpack, 3/11/78.
-** UNROLLED version
-*/
-static REAL ddot_ur(int n, REAL* dx, int incx, REAL* dy, int incy)
-
-{
-    REAL dtemp;
-    int i, ix, iy, m;
-
-    dtemp = ZERO;
-
-    if (n <= 0)
-        return(ZERO);
-
-    if (incx != 1 || incy != 1)
-    {
-
-        /* code for unequal increments or equal increments != 1 */
-
-        ix = 0;
-        iy = 0;
-        if (incx < 0) ix = (-n + 1) * incx;
-        if (incy < 0) iy = (-n + 1) * incy;
-        for (i = 0; i < n; i++)
-        {
-            dtemp = dtemp + dx[ix] * dy[iy];
-            ix = ix + incx;
-            iy = iy + incy;
-        }
-        return(dtemp);
-    }
-
-    /* code for both increments equal to 1 */
-
-    m = n % 5;
-    if (m != 0)
-    {
-        for (i = 0; i < m; i++)
-            dtemp = dtemp + dx[i] * dy[i];
-        if (n < 5)
-            return(dtemp);
-    }
-    for (i = m; i < n; i = i + 5)
-    {
-        dtemp = dtemp + dx[i] * dy[i] +
-            dx[i + 1] * dy[i + 1] + dx[i + 2] * dy[i + 2] +
-            dx[i + 3] * dy[i + 3] + dx[i + 4] * dy[i + 4];
-    }
-    return(dtemp);
-}
-
-
-/*
-** Scales a vector by a constant.
-** Jack Dongarra, linpack, 3/11/78.
-** UNROLLED version
-*/
-static void dscal_ur(int n, REAL da, REAL* dx, int incx)
-
-{
-    int i, m, nincx;
-
-    if (n <= 0)
-        return;
-    if (incx != 1)
-    {
-
-        /* code for increment not equal to 1 */
-
-        nincx = n * incx;
-        for (i = 0; i < nincx; i = i + incx)
             dx[i] = da * dx[i];
-        return;
-    }
-
-    /* code for increment equal to 1 */
-
-    m = n % 5;
-    if (m != 0)
-    {
-        for (i = 0; i < m; i++)
-            dx[i] = da * dx[i];
-        if (n < 5)
-            return;
-    }
-    for (i = m; i < n; i = i + 5)
-    {
-        dx[i] = da * dx[i];
-        dx[i + 1] = da * dx[i + 1];
-        dx[i + 2] = da * dx[i + 2];
-        dx[i + 3] = da * dx[i + 3];
-        dx[i + 4] = da * dx[i + 4];
-    }
-}
-
-
-/*
-** Finds the index of element having max. absolute value.
-** Jack Dongarra, linpack, 3/11/78.
-*/
-static int idamax(int n, REAL* dx, int incx)
-
-{
-    REAL dmax;
-    int i = 0, ix = 0, itemp = 0; // Initialize for CS230 to avoid warning
-
-    if (n < 1)
-        return(-1);
-    if (n == 1)
-        return(0);
-    if (incx != 1)
-    {
-
-        /* code for increment not equal to 1 */
-
-        ix = 1;
-        dmax = fabs((double)dx[0]);
-        ix = ix + incx;
-        for (i = 1; i < n; i++)
-        {
-            if (fabs((double)dx[ix]) > dmax)
-            {
-                itemp = i;
-                dmax = fabs((double)dx[ix]);
-            }
-            ix = ix + incx;
         }
     }
     else
     {
-
         /* code for increment equal to 1 */
+        int limit = n - (n % 4);
+        for (i = 0; i < limit; i += 4)
+        {
+            dx[i] = da * dx[i];
+            dx[i + 1] = da * dx[i + 1];
+            dx[i + 2] = da * dx[i + 2];
+            dx[i + 3] = da * dx[i + 3];
+        }
 
-        itemp = 0;
-        dmax = fabs((double)dx[0]);
-        for (i = 1; i < n; i++)
-            if (fabs((double)dx[i]) > dmax)
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dx[i] = da * dx[i];
+        }
+    }
+}
+
+// REFACTORED
+static void daxpy_ur(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
+{
+    if (n <= 0 || da == ZERO) return;
+
+    int i;
+    if (incx != 1 || incy != 1)
+    {
+        /* code for unequal increments or equal increments != 1 */
+        int ix = (incx > 0) ? 0 : (-n + 1) * incx;
+        int iy = (incy > 0) ? 0 : (-n + 1) * incy;
+
+        for (i = 0; i < n; i++)
+        {
+            dy[iy] += da * dx[ix];
+            ix += incx;
+            iy += incy;
+        }
+    }
+    else
+    {
+        /* code for both increments equal to 1 */
+        int limit = n - (n % 4);
+        for (i = 0; i < limit; i += 4)
+        {
+            dy[i] += da * dx[i];
+            dy[i + 1] += da * dx[i + 1];
+            dy[i + 2] += da * dx[i + 2];
+            dy[i + 3] += da * dx[i + 3];
+        }
+
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dy[i] += da * dx[i];
+        }
+    }
+}
+
+// REFACTORED
+static REAL ddot_ur(int n, REAL* dx, int incx, REAL* dy, int incy)
+{
+    REAL dtemp = ZERO;
+
+    if (n <= 0) return ZERO;
+
+    int i;
+    if (incx != 1 || incy != 1)
+    {
+        /* code for unequal increments or equal increments != 1 */
+        int ix = (incx > 0) ? 0 : (-n + 1) * incx;
+        int iy = (incy > 0) ? 0 : (-n + 1) * incy;
+
+        for (i = 0; i < n; i++)
+        {
+            dtemp += dx[ix] * dy[iy];
+            ix += incx;
+            iy += incy;
+        }
+    }
+    else
+    {
+        /* code for both increments equal to 1 */
+        int limit = n - (n % 5);
+        for (i = 0; i < limit; i += 5)
+        {
+            dtemp += dx[i] * dy[i] +
+                dx[i + 1] * dy[i + 1] +
+                dx[i + 2] * dy[i + 2] +
+                dx[i + 3] * dy[i + 3] +
+                dx[i + 4] * dy[i + 4];
+        }
+
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dtemp += dx[i] * dy[i];
+        }
+    }
+    return dtemp;
+}
+
+// REFACTORED
+static void dscal_ur(int n, REAL da, REAL* dx, int incx)
+{
+    if (n <= 0) return;
+
+    int i;
+    if (incx != 1)
+    {
+        /* code for increment not equal to 1 */
+        int nincx = n * incx;
+        for (i = 0; i < nincx; i += incx)
+        {
+            dx[i] = da * dx[i];
+        }
+    }
+    else
+    {
+        /* code for increment equal to 1 */
+        int limit = n - (n % 5);
+        for (i = 0; i < limit; i += 5)
+        {
+            dx[i] = da * dx[i];
+            dx[i + 1] = da * dx[i + 1];
+            dx[i + 2] = da * dx[i + 2];
+            dx[i + 3] = da * dx[i + 3];
+            dx[i + 4] = da * dx[i + 4];
+        }
+
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dx[i] = da * dx[i];
+        }
+    }
+}
+
+// REFACTORED
+static int idamax(int n, REAL* dx, int incx)
+{
+    if (n < 1) return -1;
+    if (n == 1) return 0;
+
+    int i, ix = 0, itemp = 0;
+    REAL dmax = fabs(dx[0]);
+
+    if (incx != 1)
+    {
+        /* code for increment not equal to 1 */
+        for (i = 1, ix = incx; i < n; i++, ix += incx)
+        {
+            if (fabs(dx[ix]) > dmax)
             {
                 itemp = i;
-                dmax = fabs((double)dx[i]);
+                dmax = fabs(dx[ix]);
             }
+        }
     }
-    return (itemp);
+    else
+    {
+        /* code for increment equal to 1 */
+        for (i = 1; i < n; i++)
+        {
+            if (fabs(dx[i]) > dmax)
+            {
+                itemp = i;
+                dmax = fabs(dx[i]);
+            }
+        }
+    }
+    return itemp;
 }
 
 
