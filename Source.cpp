@@ -3,29 +3,31 @@
 // CS 230 Advanced Computer Architecture
 // Date Modified: 05/28/2024
 
-/*
-**
-** LINPACK.C        Linpack benchmark, calculates FLOPS.
-**                  (FLoating Point Operations Per Second)
-**
-** Translated to C by Bonnie Toy 5/88
-**
-** Modified by Will Menninger, 10/93, with these features:
-**  (modified on 2/25/94  to fix a problem with daxpy  for
-**   unequal increments or equal increments not equal to 1.
-**     Jack Dongarra)
-**
-** - Defaults to double precision.
-** - Averages ROLLed and UNROLLed performance.
-** - User selectable array sizes.
-** - Automatically does enough repetitions to take at least 10 CPU seconds.
-** - Prints machine precision.
-** - ANSI prototyping.
-**
-** To compile:  cc -O -o linpack linpack.c -lm
-**
-**
-*/
+// MODIFICATIONS AND RESULTS
+// 
+// 1. Use AVX intrinsics for matgen()
+// Methods: Completely refactor the function to rely almost entirely on AVX instructions for more fine-tuned control over the calculations.
+// Results: While the code itself was easier to follow logically, the code produces fewer kflops and longer CPU times for both arrays sized 200 and 1000.
+// 
+// 2. Refactor degefa()
+// Methods: We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
+// Results: Kflops increased by over 100000 and CPU time was reduced by 2-3 seconds
+// 
+// 3. Reduce code redundancy in dgesl()
+// Methods: Consolidate the separate branches for roll into a single structure, reduce nesting and redundant branches, and better separate the logic for handling 'roll' and 'non-roll' cases.
+// Results: Results were inconsistent; the program performed better in terms of time and kflops with an array of size 200, but worse in both respects for size 1000 arrays.
+//
+// 4. Pointer arithmetic for daxpy_r()
+// Methods: Unrolling loops can reduce the overhead of loop control and increase instruction-level parallelism. We use poitner arithmetic for faster access and inline small functions to reduce the overhead of function calls. Additionally, we ensure data is memory-aligned for better cache performance.
+// Results: Kflops increased by over 200000 and CPU time was drastically reduced.
+//
+// 5. Loop unrolling in ddor_r()
+// Methods: Applied a loop unrolling technique in cases where 'incx' and 'incy' are both 1, in order to reduce the number of iterations and loop overhead.
+// Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
+//
+//
+//
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,8 +70,6 @@ static REAL second(void);
 
 static void* mempool;
 
-
-//void main(void)
 int main(int argc, char* argv[])
 
 {
@@ -135,7 +135,6 @@ int main(int argc, char* argv[])
     }
 }
 
-
 static REAL linpack(long nreps, int arsize)
 
 {
@@ -192,16 +191,8 @@ static REAL linpack(long nreps, int arsize)
     return(totalt);
 }
 
-
-/*
-** For matgen,
-** We would like to declare a[][lda], but c does not allow it.  In this
-** function, references to a[i][j] are written a[lda*i+j].
-*/
-
 // ORIGINAL
 static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma)
-
 {
     int init, i, j;
 
@@ -287,439 +278,67 @@ static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma)
 //    *norma = max_val;
 //}
 
-
-/*
-**
-** DGEFA benchmark
-**
-** We would like to declare a[][lda], but c does not allow it.  In this
-** function, references to a[i][j] are written a[lda*i+j].
-**
-**   dgefa factors a double precision matrix by gaussian elimination.
-**
-**   dgefa is usually called by dgeco, but it can be called
-**   directly with a saving in time if  rcond  is not needed.
-**   (time for dgeco) = (1 + 9/n)*(time for dgefa) .
-**
-**   on entry
-**
-**      a       REAL precision[n][lda]
-**              the matrix to be factored.
-**
-**      lda     integer
-**              the leading dimension of the array  a .
-**
-**      n       integer
-**              the order of the matrix  a .
-**
-**   on return
-**
-**      a       an upper triangular matrix and the multipliers
-**              which were used to obtain it.
-**              the factorization can be written  a = l*u  where
-**              l  is a product of permutation and unit lower
-**              triangular matrices and  u  is upper triangular.
-**
-**      ipvt    integer[n]
-**              an integer vector of pivot indices.
-**
-**      info    integer
-**              = 0  normal value.
-**              = k  if  u[k][k] .eq. 0.0 .  this is not an error
-**                   condition for this subroutine, but it does
-**                   indicate that dgesl or dgedi will divide by zero
-**                   if called.  use  rcond  in dgeco for a reliable
-**                   indication of singularity.
-**
-**   linpack. this version dated 08/14/78 .
-**   cleve moler, university of New Mexico, argonne national lab.
-**
-**   functions
-**
-**   blas daxpy,dscal,idamax
-**
-*/
-
-
-
-
-// ORIGINAL
- static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
-
- {
-     REAL t;
-     // int idamax(), j, k, kp1, l, nm1;
-     int j, k, kp1, l, nm1;
-
-     /* gaussian elimination with partial pivoting */
-
-     if (roll)
-     {
-         *info = 0;
-         nm1 = n - 1;
-         if (nm1 >= 0)
-             for (k = 0; k < nm1; k++)
-             {
-                 kp1 = k + 1;
-
-                 /* find l = pivot index */
-
-                 l = idamax(n - k, &a[lda * k + k], 1) + k;
-                 ipvt[k] = l;
-
-                 /* zero pivot implies this column already
-                   triangularized */
-
-                 if (a[lda * k + l] != ZERO)
-                 {
-
-                     /* interchange if necessary */
-
-                     if (l != k)
-                     {
-                         t = a[lda * k + l];
-                         a[lda * k + l] = a[lda * k + k];
-                         a[lda * k + k] = t;
-                     }
-
-                     /* compute multipliers */
-
-                     t = -ONE / a[lda * k + k];
-                     dscal_r(n - (k + 1), t, &a[lda * k + k + 1], 1);
-
-                     /* row elimination with column indexing */
-
-                     for (j = kp1; j < n; j++)
-                     {
-                         t = a[lda * j + l];
-                         if (l != k)
-                         {
-                             a[lda * j + l] = a[lda * j + k];
-                             a[lda * j + k] = t;
-                         }
-                         daxpy_r(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-                     }
-                 }
-                 else
-                     (*info) = k;
-             }
-         ipvt[n - 1] = n - 1;
-         if (a[lda * (n - 1) + (n - 1)] == ZERO)
-             (*info) = n - 1;
-     }
-     else
-     {
-         *info = 0;
-         nm1 = n - 1;
-         if (nm1 >= 0)
-             for (k = 0; k < nm1; k++)
-             {
-                 kp1 = k + 1;
-
-                 /* find l = pivot index */
-
-                 l = idamax(n - k, &a[lda * k + k], 1) + k;
-                 ipvt[k] = l;
-
-                 /* zero pivot implies this column already
-                   triangularized */
-
-                 if (a[lda * k + l] != ZERO)
-                 {
-
-                     /* interchange if necessary */
-
-                     if (l != k)
-                     {
-                         t = a[lda * k + l];
-                         a[lda * k + l] = a[lda * k + k];
-                         a[lda * k + k] = t;
-                     }
-
-                     /* compute multipliers */
-
-                     t = -ONE / a[lda * k + k];
-                     dscal_ur(n - (k + 1), t, &a[lda * k + k + 1], 1);
-
-                     /* row elimination with column indexing */
-
-                     for (j = kp1; j < n; j++)
-                     {
-                         t = a[lda * j + l];
-                         if (l != k)
-                         {
-                             a[lda * j + l] = a[lda * j + k];
-                             a[lda * j + k] = t;
-                         }
-                         daxpy_ur(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-                     }
-                 }
-                 else
-                     (*info) = k;
-             }
-         ipvt[n - 1] = n - 1;
-         if (a[lda * (n - 1) + (n - 1)] == ZERO)
-             (*info) = n - 1;
-     }
- }
-
-
 // REFACTORED
-
 // Use pointer to functions 
-//typedef void (*dscal_func)(int, REAL, REAL*, int);
-//typedef void (*daxpy_func)(int, REAL, REAL*, int, REAL*, int);
-//
-//// We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
-//static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
-//{
-//    REAL t;
-//    int j, k, kp1, l, nm1;
-//
-//    dscal_func dscal = roll ? dscal_r : dscal_ur;
-//    daxpy_func daxpy = roll ? daxpy_r : daxpy_ur;
-//
-//    /* Gaussian elimination with partial pivoting */
-//    *info = 0;
-//    nm1 = n - 1;
-//
-//    if (nm1 >= 0) {
-//        for (k = 0; k < nm1; k++) {
-//            kp1 = k + 1;
-//
-//            /* Find l = pivot index */
-//            l = idamax(n - k, &a[lda * k + k], 1) + k;
-//            ipvt[k] = l;
-//
-//            /* Zero pivot implies this column already triangularized */
-//            if (a[lda * k + l] != ZERO) {
-//
-//                /* Interchange if necessary */
-//                if (l != k) {
-//                    t = a[lda * k + l];
-//                    a[lda * k + l] = a[lda * k + k];
-//                    a[lda * k + k] = t;
-//                }
-//
-//                /* Compute multipliers */
-//                t = -ONE / a[lda * k + k];
-//                dscal(n - (k + 1), t, &a[lda * k + k + 1], 1);
-//
-//                /* Row elimination with column indexing */
-//                for (j = kp1; j < n; j++) {
-//                    t = a[lda * j + l];
-//                    if (l != k) {
-//                        a[lda * j + l] = a[lda * j + k];
-//                        a[lda * j + k] = t;
-//                    }
-//                    daxpy(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-//                }
-//            }
-//            else {
-//                *info = k;
-//            }
-//        }
-//    }
-//
-//    ipvt[n - 1] = n - 1;
-//    if (a[lda * (n - 1) + (n - 1)] == ZERO) {
-//        *info = n - 1;
-//    }
-//}
+typedef void (*dscal_func)(int, REAL, REAL*, int);
+typedef void (*daxpy_func)(int, REAL, REAL*, int, REAL*, int);
 
+// We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
+static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
+{
+    REAL t;
+    int j, k, kp1, l, nm1;
 
-/*
-**
-** DGESL benchmark
-**
-** We would like to declare a[][lda], but c does not allow it.  In this
-** function, references to a[i][j] are written a[lda*i+j].
-**
-**   dgesl solves the double precision system
-**   a * x = b  or  trans(a) * x = b
-**   using the factors computed by dgeco or dgefa.
-**
-**   on entry
-**
-**      a       double precision[n][lda]
-**              the output from dgeco or dgefa.
-**
-**      lda     integer
-**              the leading dimension of the array  a .
-**
-**      n       integer
-**              the order of the matrix  a .
-**
-**      ipvt    integer[n]
-**              the pivot vector from dgeco or dgefa.
-**
-**      b       double precision[n]
-**              the right hand side vector.
-**
-**      job     integer
-**              = 0         to solve  a*x = b ,
-**              = nonzero   to solve  trans(a)*x = b  where
-**                          trans(a)  is the transpose.
-**
-**  on return
-**
-**      b       the solution vector  x .
-**
-**   error condition
-**
-**      a division by zero will occur if the input factor contains a
-**      zero on the diagonal.  technically this indicates singularity
-**      but it is often caused by improper arguments or improper
-**      setting of lda .  it will not occur if the subroutines are
-**      called correctly and if dgeco has set rcond .gt. 0.0
-**      or dgefa has set info .eq. 0 .
-**
-**   to compute  inverse(a) * c  where  c  is a matrix
-**   with  p  columns
-**         dgeco(a,lda,n,ipvt,rcond,z)
-**         if (!rcond is too small){
-**              for (j=0,j<p,j++)
-**                      dgesl(a,lda,n,ipvt,c[j][0],0);
-**         }
-**
-**   linpack. this version dated 08/14/78 .
-**   cleve moler, university of new mexico, argonne national lab.
-**
-**   functions
-**
-**   blas daxpy,ddot
-*/
+    dscal_func dscal = roll ? dscal_r : dscal_ur;
+    daxpy_func daxpy = roll ? daxpy_r : daxpy_ur;
 
-// ORIGINAL
-// static void dgesl(REAL* a, int lda, int n, int* ipvt, REAL* b, int job, int roll)
+    /* Gaussian elimination with partial pivoting */
+    *info = 0;
+    nm1 = n - 1;
 
-// {
-//     REAL    t;
-//     int     k, kb, l, nm1;
+    if (nm1 >= 0) {
+        for (k = 0; k < nm1; k++) {
+            kp1 = k + 1;
 
-//     if (roll)
-//     {
-//         nm1 = n - 1;
-//         if (job == 0)
-//         {
+            /* Find l = pivot index */
+            l = idamax(n - k, &a[lda * k + k], 1) + k;
+            ipvt[k] = l;
 
-//             /* job = 0 , solve  a * x = b   */
-//             /* first solve  l*y = b         */
+            /* Zero pivot implies this column already triangularized */
+            if (a[lda * k + l] != ZERO) {
 
-//             if (nm1 >= 1)
-//                 for (k = 0; k < nm1; k++)
-//                 {
-//                     l = ipvt[k];
-//                     t = b[l];
-//                     if (l != k)
-//                     {
-//                         b[l] = b[k];
-//                         b[k] = t;
-//                     }
-//                     daxpy_r(n - (k + 1), t, &a[lda * k + k + 1], 1, &b[k + 1], 1);
-//                 }
+                /* Interchange if necessary */
+                if (l != k) {
+                    t = a[lda * k + l];
+                    a[lda * k + l] = a[lda * k + k];
+                    a[lda * k + k] = t;
+                }
 
-//             /* now solve  u*x = y */
+                /* Compute multipliers */
+                t = -ONE / a[lda * k + k];
+                dscal(n - (k + 1), t, &a[lda * k + k + 1], 1);
 
-//             for (kb = 0; kb < n; kb++)
-//             {
-//                 k = n - (kb + 1);
-//                 b[k] = b[k] / a[lda * k + k];
-//                 t = -b[k];
-//                 daxpy_r(k, t, &a[lda * k + 0], 1, &b[0], 1);
-//             }
-//         }
-//         else
-//         {
+                /* Row elimination with column indexing */
+                for (j = kp1; j < n; j++) {
+                    t = a[lda * j + l];
+                    if (l != k) {
+                        a[lda * j + l] = a[lda * j + k];
+                        a[lda * j + k] = t;
+                    }
+                    daxpy(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
+                }
+            }
+            else {
+                *info = k;
+            }
+        }
+    }
 
-//             /* job = nonzero, solve  trans(a) * x = b  */
-//             /* first solve  trans(u)*y = b             */
-
-//             for (k = 0; k < n; k++)
-//             {
-//                 t = ddot_r(k, &a[lda * k + 0], 1, &b[0], 1);
-//                 b[k] = (b[k] - t) / a[lda * k + k];
-//             }
-
-//             /* now solve trans(l)*x = y     */
-
-//             if (nm1 >= 1)
-//                 for (kb = 1; kb < nm1; kb++)
-//                 {
-//                     k = n - (kb + 1);
-//                     b[k] = b[k] + ddot_r(n - (k + 1), &a[lda * k + k + 1], 1, &b[k + 1], 1);
-//                     l = ipvt[k];
-//                     if (l != k)
-//                     {
-//                         t = b[l];
-//                         b[l] = b[k];
-//                         b[k] = t;
-//                     }
-//                 }
-//         }
-//     }
-//     else
-//     {
-//         nm1 = n - 1;
-//         if (job == 0)
-//         {
-
-//             /* job = 0 , solve  a * x = b   */
-//             /* first solve  l*y = b         */
-
-//             if (nm1 >= 1)
-//                 for (k = 0; k < nm1; k++)
-//                 {
-//                     l = ipvt[k];
-//                     t = b[l];
-//                     if (l != k)
-//                     {
-//                         b[l] = b[k];
-//                         b[k] = t;
-//                     }
-//                     daxpy_ur(n - (k + 1), t, &a[lda * k + k + 1], 1, &b[k + 1], 1);
-//                 }
-
-//             /* now solve  u*x = y */
-
-//             for (kb = 0; kb < n; kb++)
-//             {
-//                 k = n - (kb + 1);
-//                 b[k] = b[k] / a[lda * k + k];
-//                 t = -b[k];
-//                 daxpy_ur(k, t, &a[lda * k + 0], 1, &b[0], 1);
-//             }
-//         }
-//         else
-//         {
-
-//             /* job = nonzero, solve  trans(a) * x = b  */
-//             /* first solve  trans(u)*y = b             */
-
-//             for (k = 0; k < n; k++)
-//             {
-//                 t = ddot_ur(k, &a[lda * k + 0], 1, &b[0], 1);
-//                 b[k] = (b[k] - t) / a[lda * k + k];
-//             }
-
-//             /* now solve trans(l)*x = y     */
-
-//             if (nm1 >= 1)
-//                 for (kb = 1; kb < nm1; kb++)
-//                 {
-//                     k = n - (kb + 1);
-//                     b[k] = b[k] + ddot_ur(n - (k + 1), &a[lda * k + k + 1], 1, &b[k + 1], 1);
-//                     l = ipvt[k];
-//                     if (l != k)
-//                     {
-//                         t = b[l];
-//                         b[l] = b[k];
-//                         b[k] = t;
-//                     }
-//                 }
-//         }
-//     }
-// }
+    ipvt[n - 1] = n - 1;
+    if (a[lda * (n - 1) + (n - 1)] == ZERO) {
+        *info = n - 1;
+    }
+}
 
 // REFACTORED
 static void dgesl(REAL* a, int lda, int n, int* ipvt, REAL* b, int job, int roll)
@@ -796,85 +415,85 @@ static void dgesl(REAL* a, int lda, int n, int* ipvt, REAL* b, int job, int roll
     }
 }
 
-/*
-** Constant times a vector plus a vector.
-** Jack Dongarra, linpack, 3/11/78.
-** ROLLED version
-*/
+// REFACTORED
 static void daxpy_r(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
-
 {
-    int i, ix, iy;
+    if (n <= 0 || da == ZERO) return;
 
-    if (n <= 0)
-        return;
-    if (da == ZERO)
-        return;
-
+    int i;
     if (incx != 1 || incy != 1)
     {
-
         /* code for unequal increments or equal increments != 1 */
+        int ix = (incx > 0) ? 0 : (-n + 1) * incx;
+        int iy = (incy > 0) ? 0 : (-n + 1) * incy;
 
-        ix = 1;
-        iy = 1;
-        if (incx < 0) ix = (-n + 1) * incx + 1;
-        if (incy < 0)iy = (-n + 1) * incy + 1;
         for (i = 0; i < n; i++)
         {
-            dy[iy] = dy[iy] + da * dx[ix];
-            ix = ix + incx;
-            iy = iy + incy;
+            dy[iy] += da * dx[ix];
+            ix += incx;
+            iy += incy;
         }
-        return;
     }
+    else
+    {
+        /* code for both increments equal to 1 */
+        int limit = n - (n % 4);
+        for (i = 0; i < limit; i += 4)
+        {
+            dy[i] += da * dx[i];
+            dy[i + 1] += da * dx[i + 1];
+            dy[i + 2] += da * dx[i + 2];
+            dy[i + 3] += da * dx[i + 3];
+        }
 
-    /* code for both increments equal to 1 */
-
-    for (i = 0; i < n; i++)
-        dy[i] = dy[i] + da * dx[i];
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dy[i] += da * dx[i];
+        }
+    }
 }
 
-
-/*
-** Forms the dot product of two vectors.
-** Jack Dongarra, linpack, 3/11/78.
-** ROLLED version
-*/
+// RERFACTORED
 static REAL ddot_r(int n, REAL* dx, int incx, REAL* dy, int incy)
-
 {
-    REAL dtemp;
-    int i, ix, iy;
+    REAL dtemp = ZERO;
 
-    dtemp = ZERO;
+    if (n <= 0) return ZERO;
 
-    if (n <= 0)
-        return(ZERO);
-
+    int i;
     if (incx != 1 || incy != 1)
     {
-
         /* code for unequal increments or equal increments != 1 */
+        int ix = (incx > 0) ? 0 : (-n + 1) * incx;
+        int iy = (incy > 0) ? 0 : (-n + 1) * incy;
 
-        ix = 0;
-        iy = 0;
-        if (incx < 0) ix = (-n + 1) * incx;
-        if (incy < 0) iy = (-n + 1) * incy;
         for (i = 0; i < n; i++)
         {
-            dtemp = dtemp + dx[ix] * dy[iy];
-            ix = ix + incx;
-            iy = iy + incy;
+            dtemp += dx[ix] * dy[iy];
+            ix += incx;
+            iy += incy;
         }
-        return(dtemp);
     }
+    else
+    {
+        /* code for both increments equal to 1 */
+        int limit = n - (n % 4);
+        for (i = 0; i < limit; i += 4)
+        {
+            dtemp += dx[i] * dy[i];
+            dtemp += dx[i + 1] * dy[i + 1];
+            dtemp += dx[i + 2] * dy[i + 2];
+            dtemp += dx[i + 3] * dy[i + 3];
+        }
 
-    /* code for both increments equal to 1 */
-
-    for (i = 0; i < n; i++)
-        dtemp = dtemp + dx[i] * dy[i];
-    return(dtemp);
+        // Handle the remaining elements
+        for (; i < n; i++)
+        {
+            dtemp += dx[i] * dy[i];
+        }
+    }
+    return dtemp;
 }
 
 
