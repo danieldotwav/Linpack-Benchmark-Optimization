@@ -1,5 +1,7 @@
-// LinpackC.cpp : This program should be used as a base for CS230 Spring 2024 Lab Assignment 5.
-//
+// Name: Daniel Rivas
+// Lab 5B
+// CS 230 Advanced Computer Architecture
+// Date Modified: 05/28/2024
 
 /*
 **
@@ -198,92 +200,92 @@ static REAL linpack(long nreps, int arsize)
 */
 
 // ORIGINAL
-//static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma)
-//
-//{
-//    int init, i, j;
-//
-//    init = 1325;
-//    *norma = 0.0;
-//    for (j = 0; j < n; j++)
-//        for (i = 0; i < n; i++)
-//        {
-//            init = (int)((long)3125 * (long)init % 65536L);
-//            a[lda * j + i] = (init - 32768.0) / 16384.0;
-//            *norma = (a[lda * j + i] > *norma) ? a[lda * j + i] : *norma;
-//        }
-//    for (i = 0; i < n; i++)
-//        b[i] = 0.0;
-//    for (j = 0; j < n; j++)
-//        for (i = 0; i < n; i++)
-//            b[i] = b[i] + a[lda * j + i];
-//}
+static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma)
+
+{
+    int init, i, j;
+
+    init = 1325;
+    *norma = 0.0;
+    for (j = 0; j < n; j++)
+        for (i = 0; i < n; i++)
+        {
+            init = (int)((long)3125 * (long)init % 65536L);
+            a[lda * j + i] = (init - 32768.0) / 16384.0;
+            *norma = (a[lda * j + i] > *norma) ? a[lda * j + i] : *norma;
+        }
+    for (i = 0; i < n; i++)
+        b[i] = 0.0;
+    for (j = 0; j < n; j++)
+        for (i = 0; i < n; i++)
+            b[i] = b[i] + a[lda * j + i];
+}
 
 
 // REFACTORED
 // Here, we use inline assembly in order to improve performance in the following ways:
 // 1. Using imul and idiv to compute the next values in the sequence may provide more fine grained precision over the c++ compiler-generated equivalent code
-#include <immintrin.h>
-
-static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma) {
-    int init = 1325;
-    *norma = 0.0;
-    REAL max_val = 0.0;
-
-    // Initialize b array to zero
-    for (int i = 0; i < n; i++) {
-        b[i] = 0.0;
-    }
-
-    // Initialize max_val vector
-    __m256d max_val_vec = _mm256_set1_pd(0.0);
-
-    // Main loop
-    for (int j = 0; j < n; j++) {
-        for (int i = 0; i < n; i += 4) {
-            // Generate the next values in the sequence
-            __m256i init_vec = _mm256_set_epi32(init, init + 1, init + 2, init + 3, init + 4, init + 5, init + 6, init + 7);
-            __m256i mult_vec = _mm256_set1_epi32(3125);
-            __m256i mod_vec = _mm256_set1_epi32(65536);
-
-            init_vec = _mm256_mullo_epi32(init_vec, mult_vec);
-            init_vec = _mm256_rem_epi32(init_vec, mod_vec);
-
-            // Convert to floating point values
-            __m256d value_vec = _mm256_cvtepi32_pd(_mm256_castsi256_si128(init_vec));
-            __m256d sub_vec = _mm256_set1_pd(32768.0);
-            __m256d div_vec = _mm256_set1_pd(16384.0);
-
-            value_vec = _mm256_sub_pd(value_vec, sub_vec);
-            value_vec = _mm256_div_pd(value_vec, div_vec);
-
-            // Store values in the matrix
-            _mm256_storeu_pd(&a[lda * j + i], value_vec);
-
-            // Update max_val vector
-            max_val_vec = _mm256_max_pd(max_val_vec, value_vec);
-
-            // Accumulate the values in the b array
-            __m256d b_vec = _mm256_loadu_pd(&b[i]);
-            b_vec = _mm256_add_pd(b_vec, value_vec);
-            _mm256_storeu_pd(&b[i], b_vec);
-
-            // Increment init
-            init += 4;
-        }
-    }
-
-    // Extract the maximum value from the vector
-    double max_vals[4];
-    _mm256_storeu_pd(max_vals, max_val_vec);
-    for (int k = 0; k < 4; k++) {
-        if (max_vals[k] > max_val) {
-            max_val = max_vals[k];
-        }
-    }
-
-    *norma = max_val;
-}
+//#include <immintrin.h>
+//
+//static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma) {
+//    int init = 1325;
+//    *norma = 0.0;
+//    REAL max_val = 0.0;
+//
+//    // Initialize b array to zero
+//    for (int i = 0; i < n; i++) {
+//        b[i] = 0.0;
+//    }
+//
+//    // Initialize max_val vector
+//    __m256d max_val_vec = _mm256_set1_pd(0.0);
+//
+//    // Main loop
+//    for (int j = 0; j < n; j++) {
+//        for (int i = 0; i < n; i += 4) {
+//            // Generate the next values in the sequence
+//            __m256i init_vec = _mm256_set_epi32(init, init + 1, init + 2, init + 3, init + 4, init + 5, init + 6, init + 7);
+//            __m256i mult_vec = _mm256_set1_epi32(3125);
+//            __m256i mod_vec = _mm256_set1_epi32(65536);
+//
+//            init_vec = _mm256_mullo_epi32(init_vec, mult_vec);
+//            init_vec = _mm256_rem_epi32(init_vec, mod_vec);
+//
+//            // Convert to floating point values
+//            __m256d value_vec = _mm256_cvtepi32_pd(_mm256_castsi256_si128(init_vec));
+//            __m256d sub_vec = _mm256_set1_pd(32768.0);
+//            __m256d div_vec = _mm256_set1_pd(16384.0);
+//
+//            value_vec = _mm256_sub_pd(value_vec, sub_vec);
+//            value_vec = _mm256_div_pd(value_vec, div_vec);
+//
+//            // Store values in the matrix
+//            _mm256_storeu_pd(&a[lda * j + i], value_vec);
+//
+//            // Update max_val vector
+//            max_val_vec = _mm256_max_pd(max_val_vec, value_vec);
+//
+//            // Accumulate the values in the b array
+//            __m256d b_vec = _mm256_loadu_pd(&b[i]);
+//            b_vec = _mm256_add_pd(b_vec, value_vec);
+//            _mm256_storeu_pd(&b[i], b_vec);
+//
+//            // Increment init
+//            init += 4;
+//        }
+//    }
+//
+//    // Extract the maximum value from the vector
+//    double max_vals[4];
+//    _mm256_storeu_pd(max_vals, max_val_vec);
+//    for (int k = 0; k < 4; k++) {
+//        if (max_vals[k] > max_val) {
+//            max_val = max_vals[k];
+//        }
+//    }
+//
+//    *norma = max_val;
+//}
 
 
 /*
@@ -342,188 +344,188 @@ static void matgen(REAL* a, int lda, int n, REAL* b, REAL* norma) {
 
 
 // ORIGINAL
-// static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
+ static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
 
-// {
-//     REAL t;
-//     // int idamax(), j, k, kp1, l, nm1;
-//     int j, k, kp1, l, nm1;
+ {
+     REAL t;
+     // int idamax(), j, k, kp1, l, nm1;
+     int j, k, kp1, l, nm1;
 
-//     /* gaussian elimination with partial pivoting */
+     /* gaussian elimination with partial pivoting */
 
-//     if (roll)
-//     {
-//         *info = 0;
-//         nm1 = n - 1;
-//         if (nm1 >= 0)
-//             for (k = 0; k < nm1; k++)
-//             {
-//                 kp1 = k + 1;
+     if (roll)
+     {
+         *info = 0;
+         nm1 = n - 1;
+         if (nm1 >= 0)
+             for (k = 0; k < nm1; k++)
+             {
+                 kp1 = k + 1;
 
-//                 /* find l = pivot index */
+                 /* find l = pivot index */
 
-//                 l = idamax(n - k, &a[lda * k + k], 1) + k;
-//                 ipvt[k] = l;
+                 l = idamax(n - k, &a[lda * k + k], 1) + k;
+                 ipvt[k] = l;
 
-//                 /* zero pivot implies this column already
-//                   triangularized */
+                 /* zero pivot implies this column already
+                   triangularized */
 
-//                 if (a[lda * k + l] != ZERO)
-//                 {
+                 if (a[lda * k + l] != ZERO)
+                 {
 
-//                     /* interchange if necessary */
+                     /* interchange if necessary */
 
-//                     if (l != k)
-//                     {
-//                         t = a[lda * k + l];
-//                         a[lda * k + l] = a[lda * k + k];
-//                         a[lda * k + k] = t;
-//                     }
+                     if (l != k)
+                     {
+                         t = a[lda * k + l];
+                         a[lda * k + l] = a[lda * k + k];
+                         a[lda * k + k] = t;
+                     }
 
-//                     /* compute multipliers */
+                     /* compute multipliers */
 
-//                     t = -ONE / a[lda * k + k];
-//                     dscal_r(n - (k + 1), t, &a[lda * k + k + 1], 1);
+                     t = -ONE / a[lda * k + k];
+                     dscal_r(n - (k + 1), t, &a[lda * k + k + 1], 1);
 
-//                     /* row elimination with column indexing */
+                     /* row elimination with column indexing */
 
-//                     for (j = kp1; j < n; j++)
-//                     {
-//                         t = a[lda * j + l];
-//                         if (l != k)
-//                         {
-//                             a[lda * j + l] = a[lda * j + k];
-//                             a[lda * j + k] = t;
-//                         }
-//                         daxpy_r(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-//                     }
-//                 }
-//                 else
-//                     (*info) = k;
-//             }
-//         ipvt[n - 1] = n - 1;
-//         if (a[lda * (n - 1) + (n - 1)] == ZERO)
-//             (*info) = n - 1;
-//     }
-//     else
-//     {
-//         *info = 0;
-//         nm1 = n - 1;
-//         if (nm1 >= 0)
-//             for (k = 0; k < nm1; k++)
-//             {
-//                 kp1 = k + 1;
+                     for (j = kp1; j < n; j++)
+                     {
+                         t = a[lda * j + l];
+                         if (l != k)
+                         {
+                             a[lda * j + l] = a[lda * j + k];
+                             a[lda * j + k] = t;
+                         }
+                         daxpy_r(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
+                     }
+                 }
+                 else
+                     (*info) = k;
+             }
+         ipvt[n - 1] = n - 1;
+         if (a[lda * (n - 1) + (n - 1)] == ZERO)
+             (*info) = n - 1;
+     }
+     else
+     {
+         *info = 0;
+         nm1 = n - 1;
+         if (nm1 >= 0)
+             for (k = 0; k < nm1; k++)
+             {
+                 kp1 = k + 1;
 
-//                 /* find l = pivot index */
+                 /* find l = pivot index */
 
-//                 l = idamax(n - k, &a[lda * k + k], 1) + k;
-//                 ipvt[k] = l;
+                 l = idamax(n - k, &a[lda * k + k], 1) + k;
+                 ipvt[k] = l;
 
-//                 /* zero pivot implies this column already
-//                   triangularized */
+                 /* zero pivot implies this column already
+                   triangularized */
 
-//                 if (a[lda * k + l] != ZERO)
-//                 {
+                 if (a[lda * k + l] != ZERO)
+                 {
 
-//                     /* interchange if necessary */
+                     /* interchange if necessary */
 
-//                     if (l != k)
-//                     {
-//                         t = a[lda * k + l];
-//                         a[lda * k + l] = a[lda * k + k];
-//                         a[lda * k + k] = t;
-//                     }
+                     if (l != k)
+                     {
+                         t = a[lda * k + l];
+                         a[lda * k + l] = a[lda * k + k];
+                         a[lda * k + k] = t;
+                     }
 
-//                     /* compute multipliers */
+                     /* compute multipliers */
 
-//                     t = -ONE / a[lda * k + k];
-//                     dscal_ur(n - (k + 1), t, &a[lda * k + k + 1], 1);
+                     t = -ONE / a[lda * k + k];
+                     dscal_ur(n - (k + 1), t, &a[lda * k + k + 1], 1);
 
-//                     /* row elimination with column indexing */
+                     /* row elimination with column indexing */
 
-//                     for (j = kp1; j < n; j++)
-//                     {
-//                         t = a[lda * j + l];
-//                         if (l != k)
-//                         {
-//                             a[lda * j + l] = a[lda * j + k];
-//                             a[lda * j + k] = t;
-//                         }
-//                         daxpy_ur(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-//                     }
-//                 }
-//                 else
-//                     (*info) = k;
-//             }
-//         ipvt[n - 1] = n - 1;
-//         if (a[lda * (n - 1) + (n - 1)] == ZERO)
-//             (*info) = n - 1;
-//     }
-// }
+                     for (j = kp1; j < n; j++)
+                     {
+                         t = a[lda * j + l];
+                         if (l != k)
+                         {
+                             a[lda * j + l] = a[lda * j + k];
+                             a[lda * j + k] = t;
+                         }
+                         daxpy_ur(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
+                     }
+                 }
+                 else
+                     (*info) = k;
+             }
+         ipvt[n - 1] = n - 1;
+         if (a[lda * (n - 1) + (n - 1)] == ZERO)
+             (*info) = n - 1;
+     }
+ }
 
 
 // REFACTORED
 
 // Use pointer to functions 
-typedef void (*dscal_func)(int, REAL, REAL*, int);
-typedef void (*daxpy_func)(int, REAL, REAL*, int, REAL*, int);
-
-// We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
-static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
-{
-    REAL t;
-    int j, k, kp1, l, nm1;
-
-    dscal_func dscal = roll ? dscal_r : dscal_ur;
-    daxpy_func daxpy = roll ? daxpy_r : daxpy_ur;
-
-    /* Gaussian elimination with partial pivoting */
-    *info = 0;
-    nm1 = n - 1;
-
-    if (nm1 >= 0) {
-        for (k = 0; k < nm1; k++) {
-            kp1 = k + 1;
-
-            /* Find l = pivot index */
-            l = idamax(n - k, &a[lda * k + k], 1) + k;
-            ipvt[k] = l;
-
-            /* Zero pivot implies this column already triangularized */
-            if (a[lda * k + l] != ZERO) {
-
-                /* Interchange if necessary */
-                if (l != k) {
-                    t = a[lda * k + l];
-                    a[lda * k + l] = a[lda * k + k];
-                    a[lda * k + k] = t;
-                }
-
-                /* Compute multipliers */
-                t = -ONE / a[lda * k + k];
-                dscal(n - (k + 1), t, &a[lda * k + k + 1], 1);
-
-                /* Row elimination with column indexing */
-                for (j = kp1; j < n; j++) {
-                    t = a[lda * j + l];
-                    if (l != k) {
-                        a[lda * j + l] = a[lda * j + k];
-                        a[lda * j + k] = t;
-                    }
-                    daxpy(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
-                }
-            }
-            else {
-                *info = k;
-            }
-        }
-    }
-
-    ipvt[n - 1] = n - 1;
-    if (a[lda * (n - 1) + (n - 1)] == ZERO) {
-        *info = n - 1;
-    }
-}
+//typedef void (*dscal_func)(int, REAL, REAL*, int);
+//typedef void (*daxpy_func)(int, REAL, REAL*, int, REAL*, int);
+//
+//// We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
+//static void dgefa(REAL* a, int lda, int n, int* ipvt, int* info, int roll)
+//{
+//    REAL t;
+//    int j, k, kp1, l, nm1;
+//
+//    dscal_func dscal = roll ? dscal_r : dscal_ur;
+//    daxpy_func daxpy = roll ? daxpy_r : daxpy_ur;
+//
+//    /* Gaussian elimination with partial pivoting */
+//    *info = 0;
+//    nm1 = n - 1;
+//
+//    if (nm1 >= 0) {
+//        for (k = 0; k < nm1; k++) {
+//            kp1 = k + 1;
+//
+//            /* Find l = pivot index */
+//            l = idamax(n - k, &a[lda * k + k], 1) + k;
+//            ipvt[k] = l;
+//
+//            /* Zero pivot implies this column already triangularized */
+//            if (a[lda * k + l] != ZERO) {
+//
+//                /* Interchange if necessary */
+//                if (l != k) {
+//                    t = a[lda * k + l];
+//                    a[lda * k + l] = a[lda * k + k];
+//                    a[lda * k + k] = t;
+//                }
+//
+//                /* Compute multipliers */
+//                t = -ONE / a[lda * k + k];
+//                dscal(n - (k + 1), t, &a[lda * k + k + 1], 1);
+//
+//                /* Row elimination with column indexing */
+//                for (j = kp1; j < n; j++) {
+//                    t = a[lda * j + l];
+//                    if (l != k) {
+//                        a[lda * j + l] = a[lda * j + k];
+//                        a[lda * j + k] = t;
+//                    }
+//                    daxpy(n - (k + 1), t, &a[lda * k + k + 1], 1, &a[lda * j + k + 1], 1);
+//                }
+//            }
+//            else {
+//                *info = k;
+//            }
+//        }
+//    }
+//
+//    ipvt[n - 1] = n - 1;
+//    if (a[lda * (n - 1) + (n - 1)] == ZERO) {
+//        *info = n - 1;
+//    }
+//}
 
 
 /*
