@@ -1,52 +1,60 @@
-// Name: Daniel Rivas
-// Lab 5B
-// CS 230 Advanced Computer Architecture
-// Date Modified: 05/28/2024
+/*
+Name: Daniel Rivas
+CS 230 Advanced Computer Architecture
+Assignment: Lab 5
+Submission Type: Microsoft Visual Studio 2022
+Date Modified: 05/28/2024
+*/
 
-// MODIFICATIONS AND RESULTS
-// 
-// 1. Use AVX intrinsics for matgen()
-// Methods: Completely refactor the function to rely almost entirely on AVX instructions for more fine-tuned control over the calculations.
-// Results: While the code itself was easier to follow logically, the code produces fewer kflops and longer CPU times for both arrays sized 200 and 1000.
-// 
-// 2. Refactor degefa()
-// Methods: We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
-// Results: Kflops increased by over 100000 and CPU time was reduced by 2-3 seconds
-// 
-// 3. Reduce code redundancy in dgesl()
-// Methods: Consolidate the separate branches for roll into a single structure, reduce nesting and redundant branches, and better separate the logic for handling 'roll' and 'non-roll' cases.
-// Results: Results were inconsistent; the program performed better in terms of time and kflops with an array of size 200, but worse in both respects for size 1000 arrays.
-//
-// 4. Pointer arithmetic for daxpy_r()
-// Methods: Unrolling loops can reduce the overhead of loop control and increase instruction-level parallelism. We use poitner arithmetic for faster access and inline small functions to reduce the overhead of function calls. Additionally, we ensure data is memory-aligned for better cache performance.
-// Results: Kflops increased by over 200000 and CPU time was drastically reduced.
-//
-// 5. Loop unrolling in ddor_r()
-// Methods: Applied a loop unrolling technique in cases where 'incx' and 'incy' are both 1, in order to reduce the number of iterations and loop overhead.
-// Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
-//
-// 6. Loop unrolling in dscal_r()
-// Methods: Similar to ddor_r(), we use a loop unrolling technique, reduce the number of conditional checks, and use pointer arithmetic.
-// Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
-// 
-// 7. Remove redundancy in daxpy_ur()
-// Methods: First, we combine the initial checks into a single return statement for cleaner code, improved the loop unrolling technique similar to ddor_r and dscal, and implement pointer arithmetic.
-// Results: Kflops and CPU time improved moderately.
-// 
-// 8. Remove redundancy in ddot_ur()
-// Methods: Identical to daxpy_ur() improvements.
-// Results: Kflops and CPU time improved moderately.
-// 
-// 9. Remove redundancy in dscal_ur()
-// Methods: Identical to daxpy_ur()
-// Results: Interestingly, on it's own, showed significant improvements in both kflops as well as CPU time. However, with the previous optimizations already in place, the changes actually adversely affect both the klops and CPU. More testing is needed to understand why.
-// 
-// 10. Remove type-casting and re-initialization of variables in idamax()
-// Methods: Combined the initialization of dmax and itemp to streamline the code, combined the increment handling for both cases into a single loop. This should, in theory, improve performance especially for large arrays.
-// Results: Perhaps the single largest improvement in terms of both kflops and CPU time, as compared with any of the other changes. When implementing a custom fabs function, the kflops did not change significant but the CPU time was much higher. It seems the built-in fabs function is better equipped to deal with the current test cases.
-// 
-//
+/* COMPUTER CHARACTERISTICS */
+/*
+Processor: AMD Ryzen 7 5700G with Radeon Graphics 3.80 GHz
+RAM: 16.0 GB
+System Type: 64-bit operating system, x64-based processor
+*/
 
+/* MODIFICATIONS AND RESULTS */
+/*
+ 1. Use AVX intrinsics for matgen()
+ Methods: Completely refactor the function to rely almost entirely on AVX instructions for more fine-tuned control over the calculations.
+ Results: While the code itself was easier to follow logically, the code produces fewer kflops and longer CPU times for both arrays sized 200 and 1000. The original is used instead but the AVX implementation is kept as commented-out code for your convenience.
+ 
+ 2. Refactor degefa()
+ Methods: We can reduce redundancy in the original code by using dscal_func and daxpy_func to point to either dscal_r or dscal_ur based on the value of roll.
+ Results: Kflops increased by over 100000 and CPU time was reduced by 2-3 seconds
+ 
+ 3. Reduce code redundancy in dgesl()
+ Methods: Consolidate the separate branches for roll into a single structure, reduce nesting and redundant branches, and better separate the logic for handling 'roll' and 'non-roll' cases.
+ Results: Results were inconsistent; the program performed better in terms of time and kflops with an array of size 200, but worse in both respects for size 1000 arrays.
+
+ 4. Pointer arithmetic for daxpy_r()
+ Methods: Unrolling loops can reduce the overhead of loop control and increase instruction-level parallelism. We use poitner arithmetic for faster access and inline small functions to reduce the overhead of function calls. Additionally, we ensure data is memory-aligned for better cache performance.
+ Results: Kflops increased by over 200000 and CPU time was drastically reduced.
+
+ 5. Loop unrolling in ddor_r()
+ Methods: Applied a loop unrolling technique in cases where 'incx' and 'incy' are both 1, in order to reduce the number of iterations and loop overhead.
+ Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
+
+ 6. Loop unrolling in dscal_r()
+ Methods: Similar to ddor_r(), we use a loop unrolling technique, reduce the number of conditional checks, and use pointer arithmetic.
+ Results: Kflops increased marginally, and CPU time remained relatively constant with minor improvements.
+ 
+ 7. Remove redundancy in daxpy_ur()
+ Methods: First, we combine the initial checks into a single return statement for cleaner code, improved the loop unrolling technique similar to ddor_r and dscal, and implement pointer arithmetic.
+ Results: Kflops and CPU time improved moderately.
+ 
+ 8. Remove redundancy in ddot_ur()
+ Methods: Identical to daxpy_ur() improvements.
+ Results: Kflops and CPU time improved moderately.
+ 
+ 9. Remove redundancy in dscal_ur()
+ Methods: Identical to daxpy_ur()
+ Results: Interestingly, on it's own, showed significant improvements in both kflops as well as CPU time. However, with the previous optimizations already in place, the changes actually adversely affect both the klops and CPU. More testing is needed to understand why.
+ 
+ 10. Remove type-casting and re-initialization of variables in idamax()
+ Methods: Combined the initialization of dmax and itemp to streamline the code, combined the increment handling for both cases into a single loop. This should, in theory, improve performance especially for large arrays.
+ Results: Perhaps the single largest improvement in terms of both kflops and CPU time, as compared with any of the other changes. When implementing a custom fabs function, the kflops did not change significant but the CPU time was much higher. It seems the built-in fabs function is better equipped to deal with the current test cases.
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -463,7 +471,7 @@ static void daxpy_r(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
             dy[i + 3] += da * dx[i + 3];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dy[i] += da * dx[i];
@@ -504,7 +512,7 @@ static REAL ddot_r(int n, REAL* dx, int incx, REAL* dy, int incy)
             dtemp += dx[i + 3] * dy[i + 3];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dtemp += dx[i] * dy[i];
@@ -540,7 +548,7 @@ static void dscal_r(int n, REAL da, REAL* dx, int incx)
             dx[i + 3] = da * dx[i + 3];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dx[i] = da * dx[i];
@@ -579,7 +587,7 @@ static void daxpy_ur(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
             dy[i + 3] += da * dx[i + 3];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dy[i] += da * dx[i];
@@ -621,7 +629,7 @@ static REAL ddot_ur(int n, REAL* dx, int incx, REAL* dy, int incy)
                 dx[i + 4] * dy[i + 4];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dtemp += dx[i] * dy[i];
@@ -658,7 +666,7 @@ static void dscal_ur(int n, REAL da, REAL* dx, int incx)
             dx[i + 4] = da * dx[i + 4];
         }
 
-        // Handle the remaining elements
+        /* handle the remaining elements */
         for (; i < n; i++)
         {
             dx[i] = da * dx[i];
