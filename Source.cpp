@@ -71,7 +71,7 @@ MODIFICATIONS AND OBSERVATIONS
  Results: Results were inconsistent; the program performed better in terms of time and kflops with an array of size 200, but worse in both respects for size 1000 arrays.
 
  4. Pointer arithmetic for daxpy_r()
- Methods: Unrolling loops can reduce the overhead of loop control and increase instruction-level parallelism. We use poitner arithmetic for faster access and inline small functions to reduce the overhead of function calls. Additionally, we ensure data is memory-aligned for better cache performance.
+ Methods: Unrolling loops can reduce the overhead of loop control and increase instruction-level parallelism. We use pointer arithmetic for faster access and inline small functions to reduce the overhead of function calls. Additionally, we ensure data is memory-aligned for better cache performance. An ASM implementation is provided, but during testing, produced overall worse results that the improved c++ code.
  Results: Kflops increased by over 200000 and CPU time was drastically reduced.
 
  5. Loop unrolling in ddor_r()
@@ -528,7 +528,63 @@ static void dgesl(REAL* a, int lda, int n, int* ipvt, REAL* b, int job, int roll
     }
 }
 
-// REFACTORED
+//// REFACTORED WITH ASM
+//static void daxpy_r(int n, double da, double* dx, int incx, double* dy, int incy)
+//{
+//    int i, ix, iy;
+//    double* dee_x = dx;
+//    double* dee_y = dy;
+//
+//    if (n <= 0)
+//        return;
+//    if (da == 0.0)
+//        return;
+//
+//    if (incx != 1 || incy != 1)
+//    {
+//        // Code for unequal increments or equal increments != 1
+//        ix = 1;
+//        iy = 1;
+//        if (incx < 0) ix = (-n + 1) * incx + 1;
+//        if (incy < 0) iy = (-n + 1) * incy + 1;
+//        for (i = 0; i < n; i++)
+//        {
+//            __asm {
+//                mov eax, ix
+//                mov edx, iy
+//                mov ecx, dee_x
+//                mov ebx, dy
+//                fld qword ptr[ecx + 8 * eax]; Load dx[ix]
+//                fld qword ptr[ebx + 8 * edx]; Load dy[iy]
+//                fld qword ptr[da]; Load da onto the FPU stack
+//                fmul st(0), st(2); Multiply da and dx[ix]
+//                faddp st(1), st(0); Add the result to dy[iy]
+//                fstp qword ptr[ebx + 8 * edx]; Store the result back to dy[iy]
+//            }
+//            ix += incx;
+//            iy += incy;
+//        }
+//        return;
+//    }
+//
+//    // Code for both increments equal to 1
+//    for (i = 0; i < n; i++)
+//    {
+//        __asm {
+//            mov eax, i
+//            mov ecx, dee_x
+//            mov ebx, dy
+//            fld qword ptr[ecx + 8 * eax]; Load dx[i]
+//            fld qword ptr[ebx + 8 * eax]; Load dy[i]
+//            fld qword ptr[da]; Load da onto the FPU stack
+//            fmul st(0), st(2); Multiply da and dx[i]
+//            faddp st(1), st(0); Add the result to dy[i]
+//            fstp qword ptr[ebx + 8 * eax]; Store the result back to dy[i]
+//        }
+//    }
+//}
+
+// REFACTORED WITHOUT ASM
 static void daxpy_r(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
 {
     if (n <= 0 || da == ZERO) return;
