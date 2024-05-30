@@ -10,6 +10,7 @@ COMPUTER CHARACTERISTICS
 ----------------------------------------------------------------------------------
 Processor: AMD Ryzen 7 5700G with Radeon Graphics 3.80 GHz
 RAM: 16.0 GB
+Operating System: Windows 10
 System Type: 64-bit operating system, x64-based processor
 
 ----------------------------------------------------------------------------------
@@ -732,7 +733,7 @@ static void daxpy_ur(int n, REAL da, REAL* dx, int incx, REAL* dy, int incy)
         }
 
         /* handle the remaining elements */
-        for (; i < n; i++)
+        for (/* i is already set */; i < n; i++)
         {
             dy[i] += da * dx[i];
         }
